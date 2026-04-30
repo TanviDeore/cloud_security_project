@@ -1,0 +1,17 @@
+{
+  "patient_id": "bob",
+  "full_name": "Bob Nguyen",
+  "dob": "1985-09-30",
+  "blood_type": "A-",
+  "allergies": [],
+  "conditions": [
+    {"name": "migraine", "diagnosed": "2019-06-02", "status": "intermittent"}
+  ],
+  "medications": [
+    {"name": "Sumatriptan", "dose": "50 mg", "frequency": "as needed"}
+  ],
+  "encounters": [
+    {"date": "2026-02-18", "provider": "UTSW Neurology",
+     "notes": "Aura frequency reduced. Continue PRN."}
+  ]
+}

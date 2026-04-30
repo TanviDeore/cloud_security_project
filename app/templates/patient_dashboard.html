@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Patient · {{ user.username }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>My Record · {{ user.username }}</h1>
+  <p class="muted">
+    You are the sole authority over this record. Grants are stored in DynamoDB
+    and enforced by the smart-contract Lambda. Every grant, revoke, and access
+    attempt is appended to the tamper-evident audit ledger.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Grant access to a doctor</h2>
+  <form method="post" action="{{ url_for('patient.grant') }}" class="row">
+    <label>Doctor
+      <select name="doctor_id" required>
+        {% for d in doctors %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Duration (seconds)
+      <input type="number" name="ttl_seconds" value="86400" min="60">
+    </label>
+    <button type="submit">Grant</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Active grants</h2>
+  {% if grants %}
+    <table>
+      <thead><tr><th>Doctor</th><th>Scope</th><th>Expires (epoch)</th><th>Revoked</th><th></th></tr></thead>
+      <tbody>
+        {% for g in grants %}
+          <tr>
+            <td>{{ g.doctor_id }}</td>
+            <td>{{ g.scope }}</td>
+            <td>{{ g.expires_at }}</td>
+            <td>{{ "yes" if g.revoked else "no" }}</td>
+            <td>
+              <form method="post" action="{{ url_for('patient.revoke') }}">
+                <input type="hidden" name="doctor_id" value="{{ g.doctor_id }}">
+                <button class="danger" type="submit">Revoke</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No grants issued yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent ledger entries about my record</h2>
+  {% if blocks %}
+    <table class="ledger">
+      <thead><tr><th>#</th><th>When</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for b in blocks|reverse %}
+          <tr class="action-{{ b.action|lower }}">
+            <td>{{ b.block_id }}</td>
+            <td>{{ b.timestamp|ts }}</td>
+            <td>{{ b.actor }}</td>
+            <td>{{ b.action }}</td>
+            <td><code>{{ b.details }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No activity recorded.</p>
+  {% endif %}
+</section>
+{% endblock %}

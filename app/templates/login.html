@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Login · EHR Cloud{% endblock %}
+{% block content %}
+<section class="card center">
+  <h1>Sign in</h1>
+  <p class="muted">Authenticated via Amazon Cognito (LocalStack). JWT signing key is loaded from Secrets Manager.</p>
+  <form method="post" class="stack">
+    <label>Username
+      <input name="username" autofocus required>
+    </label>
+    <label>Password
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit">Login</button>
+  </form>
+  <details class="muted">
+    <summary>Demo credentials</summary>
+    <ul>
+      <li><b>alice</b> / password &nbsp;(patient)</li>
+      <li><b>bob</b> / password &nbsp;(patient)</li>
+      <li><b>dr_smith</b> / password &nbsp;(doctor)</li>
+      <li><b>dr_jones</b> / password &nbsp;(doctor)</li>
+    </ul>
+  </details>
+</section>
+{% endblock %}

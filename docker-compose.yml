@@ -1,0 +1,22 @@
+services:
+  localstack:
+    image: localstack/localstack:3.5
+    container_name: ehr-localstack
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3,kms,dynamodb,secretsmanager,lambda,apigateway,cognito-idp,cloudwatch,logs,iam,sts
+      - DEBUG=0
+      - PERSISTENCE=1
+      - LAMBDA_EXECUTOR=local
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - "./.localstack:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

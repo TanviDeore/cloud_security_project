@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Doctor · {{ user.username }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Doctor portal · {{ user.username }}</h1>
+  <p class="muted">
+    Records are AES-256-GCM encrypted in S3 with KMS-managed envelope keys.
+    The smart-contract Lambda will only return a record after verifying you
+    have an unexpired, unrevoked grant from the patient.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Request a patient record</h2>
+  <form method="post" action="{{ url_for('doctor.request_record') }}" class="row">
+    <label>Patient
+      <select name="patient_id" required>
+        {% for p in patients %}<option value="{{ p.username }}">{{ p.username }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit">Fetch record</button>
+  </form>
+</section>
+
+{% if record %}
+<section class="card">
+  <h2>Decrypted record · {{ record.patient }}</h2>
+  <p class="muted">Audit block #{{ record.block }} appended.</p>
+  <pre class="record">{{ record.json }}</pre>
+</section>
+{% endif %}
+
+{% if last_error %}
+<section class="card error">
+  <h2>Access denied</h2>
+  <pre>{{ last_error }}</pre>
+</section>
+{% endif %}
+{% endblock %}

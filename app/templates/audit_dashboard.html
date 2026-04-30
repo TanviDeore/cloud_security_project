@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Audit Ledger{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Blockchain Audit Ledger</h1>
+  <p class="muted">
+    Tamper-evident chain of SHA-256 hashed events stored in DynamoDB.
+    Every block's hash links to its predecessor; editing any block in place
+    invalidates the chain from that point forward.
+  </p>
+
+  {% if chain.valid %}
+    <div class="badge ok">CHAIN VALID · {{ chain.total }} blocks verified</div>
+  {% else %}
+    <div class="badge bad">
+      CHAIN BROKEN at block #{{ chain.broken_at }} — {{ chain.reason }}
+    </div>
+  {% endif %}
+</section>
+
+{% if chart %}
+<section class="card">
+  <h2>Events by action</h2>
+  <img class="chart" src="data:image/png;base64,{{ chart }}" alt="Audit chart">
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>All blocks</h2>
+  {% if blocks %}
+    <table class="ledger">
+      <thead><tr>
+        <th>#</th><th>When</th><th>Actor</th><th>Action</th>
+        <th>Resource</th><th>Details</th><th>prev → hash</th>
+      </tr></thead>
+      <tbody>
+        {% for b in blocks|reverse %}
+          <tr class="action-{{ b.action|lower }}">
+            <td>{{ b.block_id }}</td>
+            <td>{{ b.timestamp|ts }}</td>
+            <td>{{ b.actor }}</td>
+            <td>{{ b.action }}</td>
+            <td>{{ b.resource }}</td>
+            <td><code>{{ b.details }}</code></td>
+            <td class="hash">
+              <span title="{{ b.prev_hash }}">{{ b.prev_hash[:8] }}…</span>
+              →
+              <span title="{{ b.hash }}">{{ b.hash[:8] }}…</span>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">Ledger is empty.</p>
+  {% endif %}
+</section>
+{% endblock %}

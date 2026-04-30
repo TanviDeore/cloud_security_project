@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}EHR Cloud{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">EHR · Patient-Centric Cloud Exchange</div>
+    {% if session.get('user') %}
+      <nav>
+        {% if session['user']['role'] == 'patient' %}
+          <a href="{{ url_for('patient.dashboard') }}">My Record</a>
+        {% else %}
+          <a href="{{ url_for('doctor.dashboard') }}">Patient Lookup</a>
+        {% endif %}
+        <a href="{{ url_for('audit.dashboard') }}">Audit Ledger</a>
+        <span class="user">{{ session['user']['username'] }} ({{ session['user']['role'] }})</span>
+        <a href="{{ url_for('auth.logout') }}">Logout</a>
+      </nav>
+    {% endif %}
+  </header>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash flash-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    Cloud-backed by S3 · KMS · DynamoDB · Cognito · Secrets Manager · Lambda · API Gateway · CloudWatch (LocalStack)
+  </footer>
+</body>
+</html>
