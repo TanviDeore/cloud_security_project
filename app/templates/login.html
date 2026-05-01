@@ -1,26 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Login · EHR Cloud{% endblock %}
+{% block title %}Sign in · EHR Cloud{% endblock %}
 {% block content %}
 <section class="card center">
   <h1>Sign in</h1>
-  <p class="muted">Authenticated via Amazon Cognito (LocalStack). JWT signing key is loaded from Secrets Manager.</p>
+  <p class="muted small">Five failed attempts will lock the account for 15 minutes.</p>
   <form method="post" class="stack">
     <label>Username
-      <input name="username" autofocus required>
+      <input name="username" autocomplete="username" autofocus required>
     </label>
     <label>Password
-      <input type="password" name="password" required>
+      <input type="password" name="password" autocomplete="current-password" required>
     </label>
-    <button type="submit">Login</button>
+    <button type="submit">Sign in</button>
   </form>
-  <details class="muted">
-    <summary>Demo credentials</summary>
-    <ul>
-      <li><b>alice</b> / password &nbsp;(patient)</li>
-      <li><b>bob</b> / password &nbsp;(patient)</li>
-      <li><b>dr_smith</b> / password &nbsp;(doctor)</li>
-      <li><b>dr_jones</b> / password &nbsp;(doctor)</li>
-    </ul>
-  </details>
+  <hr class="divider">
+  <p class="muted small center-text">
+    New patient? <a href="{{ url_for('signup.patient_signup') }}">Create an account</a><br>
+    Healthcare provider? <a href="{{ url_for('signup.doctor_signup') }}">Register with NPI</a>
+  </p>
 </section>
 {% endblock %}

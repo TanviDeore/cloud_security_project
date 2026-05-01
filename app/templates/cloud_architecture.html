@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Cloud architecture · EHR Cloud{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Cloud architecture</h1>
+  <p class="muted">
+    Every security control in this platform maps directly to a managed
+    cloud-native primitive. The page below is intended for reviewers,
+    auditors, and engineers; ordinary patients and clinicians never need
+    to see it.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Security &harr; cloud mapping</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Security requirement</th>
+        <th>Cloud service</th>
+        <th>Why the cloud version is stronger</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>EHR confidentiality at rest</td>
+        <td>S3 with SSE-KMS, bucket versioning</td>
+        <td>Server-side encryption with managed key rotation; versioning protects against tamper / ransomware rollback</td>
+      </tr>
+      <tr>
+        <td>Per-patient key isolation</td>
+        <td>AWS KMS (envelope encryption)</td>
+        <td>One CMK wraps every per-patient data key; revoking the CMK revokes all decryption ability</td>
+      </tr>
+      <tr>
+        <td>Authentication</td>
+        <td>Amazon Cognito user pool</td>
+        <td>Hosted identity service; pluggable MFA; tokens issued and signed by AWS</td>
+      </tr>
+      <tr>
+        <td>Authorization (RBAC + scoped grants)</td>
+        <td>IAM-style policy evaluated in AWS Lambda</td>
+        <td>Declarative JSON policy; least-privilege ladder (read &lt; write &lt; history)</td>
+      </tr>
+      <tr>
+        <td>Provider verification</td>
+        <td>External CMS NPI Registry API</td>
+        <td>Authoritative source of truth — admins authorize the lookup, they don't decide who is a real doctor</td>
+      </tr>
+      <tr>
+        <td>Tamper-evident audit</td>
+        <td>DynamoDB chained-hash ledger + CloudTrail</td>
+        <td>Two independent records of the same events; chain breaks are visible in seconds</td>
+      </tr>
+      <tr>
+        <td>JWT signing key custody</td>
+        <td>AWS Secrets Manager</td>
+        <td>Never in code; supports automatic rotation; access is itself audited</td>
+      </tr>
+      <tr>
+        <td>Patient export integrity</td>
+        <td>AWS KMS asymmetric (RSA-2048) signing</td>
+        <td>Audit PDF carries a cryptographic signature anyone can verify with the public key</td>
+      </tr>
+      <tr>
+        <td>Anomaly detection</td>
+        <td>CloudWatch Logs metric filter + alarm</td>
+        <td>Failed-access bursts trigger an automated alarm</td>
+      </tr>
+      <tr>
+        <td>Reduced compute exposure</td>
+        <td>API Gateway in front of Lambda</td>
+        <td>No EC2/container surface; throttling and WAF available</td>
+      </tr>
+      <tr>
+        <td>Disaster recovery</td>
+        <td>S3 versioning</td>
+        <td>Point-in-time restore on any object</td>
+      </tr>
+      <tr>
+        <td>Account protection</td>
+        <td>bcrypt password hashing + lockout policy</td>
+        <td>Five failed sign-ins lock the account for 15 minutes; passwords are never stored in plaintext</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Why every box is a cloud service</h2>
+  <p class="muted">
+    Replacing any service in this design with a "local" alternative
+    (a flat file, an environment variable, an in-process dictionary)
+    weakens at least one row of the mapping above. Keeping every control
+    in a managed cloud primitive is what lets a small team operate this
+    platform under HIPAA without standing up its own key-management,
+    identity, audit, and monitoring infrastructure.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Demo deployment</h2>
+  <p class="muted">
+    For development and academic demos this stack runs on
+    <a href="https://localstack.cloud/" target="_blank" rel="noopener">LocalStack</a>,
+    which provides API-compatible local emulators for the AWS services
+    above. The application code is identical between LocalStack and a
+    real AWS deployment — only the endpoint URL changes.
+  </p>
+</section>
+{% endblock %}

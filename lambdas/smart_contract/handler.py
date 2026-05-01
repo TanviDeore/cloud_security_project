@@ -1,32 +1,47 @@
-"""Smart-contract Lambda. Routed via API Gateway:
+"""Smart-contract Lambda. API Gateway routes:
+
   POST /grant            { patient_id, doctor_id, scope?, ttl_seconds? }
   POST /revoke           { patient_id, doctor_id }
   POST /request-record   { patient_id }
+  POST /add-note         { patient_id, note }
+  GET  /view-history     ?patient_id=...
   GET  /audit
   GET  /verify-chain
+  POST /verify-npi       (admin) { username, npi, first_name, last_name, state }
+  POST /approve-doctor   (admin) { username }
+  POST /reject-doctor    (admin) { username, reason? }
 
 Auth: HS512 JWT in Authorization: Bearer header, signed with the key in
-Secrets Manager. Claims: { sub: username, role: patient|doctor, exp }.
+Secrets Manager. Claims: { sub: username, role: patient|doctor|admin, exp }.
 """
 import base64
 import json
 import os
 import time
+from decimal import Decimal
 from typing import Any, Dict
 
 import jwt as pyjwt
 
-from cloud import cloudwatch_logger, ledger, policy_store, s3_store
+from cloud import (cloudwatch_logger, ledger, notifications, npi_client,
+                   policy_store, s3_store, users)
 from cloud.secrets_client import jwt_signing_key
 
 from rbac_policy import evaluate
+
+
+class _DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return int(o) if o == int(o) else float(o)
+        return super().default(o)
 
 
 def _resp(status: int, body: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body),
+        "body": json.dumps(body, cls=_DecimalEncoder),
     }
 
 
@@ -93,15 +108,27 @@ def lambda_handler(event, context):
             return _revoke(principal, body)
         if method == "POST" and route == "request-record":
             return _request_record(principal, body)
+        if method == "POST" and route == "add-note":
+            return _add_note(principal, body)
+        if method == "GET" and route == "view-history":
+            return _view_history(principal, event)
         if method == "GET" and route == "audit":
             return _audit(principal)
         if method == "GET" and route == "verify-chain":
             return _verify_chain()
+        if method == "POST" and route == "verify-npi":
+            return _verify_npi(principal, body)
+        if method == "POST" and route == "approve-doctor":
+            return _approve_doctor(principal, body)
+        if method == "POST" and route == "reject-doctor":
+            return _reject_doctor(principal, body)
     except Exception as e:
         return _resp(500, {"error": "internal", "detail": str(e)})
 
     return _resp(404, {"error": "no such route", "route": route})
 
+
+# ---------------------------------------------------------------- patient ---
 
 def _grant(principal, body):
     patient_id = body.get("patient_id")
@@ -119,7 +146,13 @@ def _grant(principal, body):
                               details={"doctor": doctor_id, "scope": scope,
                                        "ttl_seconds": ttl})
     cloudwatch_logger.emit("GRANT", actor=principal["username"],
-                           patient=patient_id, doctor=doctor_id)
+                           patient=patient_id, doctor=doctor_id, scope=scope)
+    notifications.push(doctor_id,
+                       f"{patient_id} granted you '{scope}' access (expires "
+                       f"{int(item['expires_at'])})", link="/doctor/")
+    notifications.push(patient_id,
+                       f"You granted {doctor_id} '{scope}' access",
+                       link="/patient/")
     return _resp(200, {"granted": item, "block": blk["block_id"]})
 
 
@@ -137,8 +170,14 @@ def _revoke(principal, body):
                               details={"doctor": doctor_id})
     cloudwatch_logger.emit("REVOKE", actor=principal["username"],
                            patient=patient_id, doctor=doctor_id)
+    notifications.push(doctor_id,
+                       f"{patient_id} revoked your access", link="/doctor/")
+    notifications.push(patient_id,
+                       f"You revoked {doctor_id}'s access", link="/patient/")
     return _resp(200, {"revoked": True, "block": blk["block_id"]})
 
+
+# ----------------------------------------------------------------- doctor ---
 
 def _request_record(principal, body):
     patient_id = body.get("patient_id")
@@ -148,6 +187,9 @@ def _request_record(principal, body):
                             {"GrantExists": grant_item is not None})
     if not allowed:
         return _deny(principal["username"], "request-record", resource, why)
+    if not policy_store.scope_includes(grant_item.get("scope", "read"), "read"):
+        return _deny(principal["username"], "request-record", resource,
+                     f"grant scope {grant_item.get('scope')} does not include 'read'")
     try:
         record = s3_store.get_record(patient_id)
     except Exception as e:
@@ -158,16 +200,131 @@ def _request_record(principal, body):
                               details={"scope": grant_item.get("scope")})
     cloudwatch_logger.emit("RECORD_FETCH", actor=principal["username"],
                            patient=patient_id)
+    notifications.push(patient_id,
+                       f"Dr. {principal['username']} accessed your record",
+                       link="/patient/")
     return _resp(200, {"record": record, "block": blk["block_id"],
+                       "scope": grant_item.get("scope"),
                        "expires_at": grant_item["expires_at"]})
 
+
+def _add_note(principal, body):
+    patient_id = body.get("patient_id")
+    note_text = (body.get("note") or "").strip()
+    resource = f"patient::{patient_id}"
+    if not note_text:
+        return _resp(400, {"error": "empty note"})
+    grant_item = policy_store.lookup(patient_id, principal["username"])
+    allowed, why = evaluate(principal, "add-note", resource,
+                            {"GrantExists": grant_item is not None})
+    if not allowed:
+        return _deny(principal["username"], "add-note", resource, why)
+    if not policy_store.scope_includes(grant_item.get("scope", "read"), "write"):
+        return _deny(principal["username"], "add-note", resource,
+                     f"grant scope '{grant_item.get('scope')}' is read-only — "
+                     f"need 'write' or 'history'")
+    put = s3_store.append_note(patient_id, principal["username"], note_text)
+    blk = ledger.append_block(
+        actor=principal["username"], action="UPDATE_RECORD", resource=resource,
+        details={"version_id": put["version_id"],
+                 "note_excerpt": note_text[:120]})
+    cloudwatch_logger.emit("UPDATE_RECORD", actor=principal["username"],
+                           patient=patient_id, version=put["version_id"])
+    notifications.push(patient_id,
+                       f"Dr. {principal['username']} added a note "
+                       f"(record version {put['version_id'][:8]}…)",
+                       link="/patient/")
+    return _resp(200, {"version_id": put["version_id"], "block": blk["block_id"]})
+
+
+def _view_history(principal, event):
+    qs = (event.get("queryStringParameters") or {}) if event else {}
+    patient_id = (qs or {}).get("patient_id", principal["username"])
+    resource = f"patient::{patient_id}"
+    if principal["role"] == "patient" and principal["username"] != patient_id:
+        return _deny(principal["username"], "view-history", resource,
+                     "patient may only view own history")
+    if principal["role"] == "doctor":
+        grant_item = policy_store.lookup(patient_id, principal["username"])
+        allowed, why = evaluate(principal, "view-history", resource,
+                                {"GrantExists": grant_item is not None})
+        if not allowed:
+            return _deny(principal["username"], "view-history", resource, why)
+        if not policy_store.scope_includes(grant_item.get("scope", "read"), "read"):
+            return _deny(principal["username"], "view-history", resource,
+                         f"grant scope '{grant_item.get('scope')}' does not include 'read'")
+    versions = s3_store.list_versions(patient_id)
+    return _resp(200, {"versions": versions})
+
+
+# ------------------------------------------------------------------ admin ---
+
+def _verify_npi(principal, body):
+    if principal["role"] != "admin":
+        return _deny(principal["username"], "verify-npi",
+                     f"user::{body.get('username')}",
+                     "only admin may run NPI verification")
+    result = npi_client.verify(
+        body.get("npi", ""), body.get("first_name", ""),
+        body.get("last_name", ""), body.get("state", ""))
+    blk = ledger.append_block(
+        actor=principal["username"], action="NPI_VERIFY",
+        resource=f"user::{body.get('username','')}",
+        details={"valid": bool(result.get("valid")),
+                 "source": result.get("source"),
+                 "npi": body.get("npi")})
+    return _resp(200, {"result": result, "block": blk["block_id"]})
+
+
+def _approve_doctor(principal, body):
+    if principal["role"] != "admin":
+        return _deny(principal["username"], "approve-doctor",
+                     f"user::{body.get('username')}",
+                     "only admin may approve doctors")
+    target = body.get("username")
+    user = users.get(target)
+    if not user or user.get("role") != "doctor":
+        return _resp(404, {"error": "user not found or not a doctor"})
+    users.set_status(target, "active")
+    blk = ledger.append_block(
+        actor=principal["username"], action="APPROVE_DOCTOR",
+        resource=f"user::{target}", details={"approved_by": principal["username"]})
+    notifications.push(target,
+                       "Your doctor account was approved. You may now log in.",
+                       link="/login")
+    return _resp(200, {"approved": True, "block": blk["block_id"]})
+
+
+def _reject_doctor(principal, body):
+    if principal["role"] != "admin":
+        return _deny(principal["username"], "reject-doctor",
+                     f"user::{body.get('username')}",
+                     "only admin may reject doctors")
+    target = body.get("username")
+    reason = body.get("reason", "")
+    users.set_status(target, "rejected")
+    blk = ledger.append_block(
+        actor=principal["username"], action="REJECT_DOCTOR",
+        resource=f"user::{target}",
+        details={"reason": reason, "rejected_by": principal["username"]})
+    notifications.push(target,
+                       f"Your doctor account was rejected: {reason}",
+                       link="/login")
+    return _resp(200, {"rejected": True, "block": blk["block_id"]})
+
+
+# ------------------------------------------------------------------- read ---
 
 def _audit(principal):
     blocks = list(ledger.all_blocks())
     if principal["role"] == "patient":
-        # Patients only see blocks about their own record
+        # patients see only blocks against their own record
         mine = f"patient::{principal['username']}"
         blocks = [b for b in blocks if b["resource"] == mine]
+    elif principal["role"] == "doctor":
+        # doctors see only blocks where they were the actor
+        blocks = [b for b in blocks if b["actor"] == principal["username"]]
+    # admins see everything
     return _resp(200, {"blocks": [_serialize_block(b) for b in blocks]})
 
 

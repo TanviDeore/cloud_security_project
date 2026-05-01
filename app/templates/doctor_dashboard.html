@@ -4,19 +4,37 @@
 <section class="card">
   <h1>Doctor portal · {{ user.username }}</h1>
   <p class="muted">
-    Records are AES-256-GCM encrypted in S3 with KMS-managed envelope keys.
-    The smart-contract Lambda will only return a record after verifying you
-    have an unexpired, unrevoked grant from the patient.
+    You can only view a patient record after the patient has issued you a
+    current, unrevoked grant. Adding a clinical note requires
+    <span class="badge-scope scope-write">write</span> access.
   </p>
+</section>
+
+<section class="card">
+  <h2>Patients who granted me access ({{ my_grants|length }})</h2>
+  {% if my_grants %}
+    <table>
+      <thead><tr><th>Patient</th><th>Scope</th><th>Expires in</th></tr></thead>
+      <tbody>
+        {% for g in my_grants %}
+          <tr>
+            <td>{{ g.patient_id }}</td>
+            <td><span class="badge-scope scope-{{ g.scope }}">{{ g.scope }}</span></td>
+            <td>{{ g.expires_at|relative_time }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">You have no active grants. Ask a patient to grant you access.</p>
+  {% endif %}
 </section>
 
 <section class="card">
   <h2>Request a patient record</h2>
   <form method="post" action="{{ url_for('doctor.request_record') }}" class="row">
     <label>Patient
-      <select name="patient_id" required>
-        {% for p in patients %}<option value="{{ p.username }}">{{ p.username }}</option>{% endfor %}
-      </select>
+      <input name="patient_id" placeholder="patient username" required>
     </label>
     <button type="submit">Fetch record</button>
   </form>
@@ -24,9 +42,23 @@
 
 {% if record %}
 <section class="card">
-  <h2>Decrypted record · {{ record.patient }}</h2>
+  <h2>Decrypted record · {{ record.patient }}
+    <span class="badge-scope scope-{{ record.scope }}">{{ record.scope }}</span></h2>
   <p class="muted">Audit block #{{ record.block }} appended.</p>
   <pre class="record">{{ record.json }}</pre>
+
+  {% if record.scope in ('write', 'history') %}
+  <h3>Add clinical note</h3>
+  <form method="post" action="{{ url_for('doctor.add_note') }}" class="stack">
+    <input type="hidden" name="patient_id" value="{{ record.patient }}">
+    <textarea name="note" rows="3" required
+              placeholder="e.g. BP 130/85, started low-dose ACEi 5 mg."></textarea>
+    <button type="submit">Append note</button>
+  </form>
+  {% else %}
+  <p class="muted small">This grant is read-only. The patient must upgrade
+     your scope to <code>write</code> to let you add notes.</p>
+  {% endif %}
 </section>
 {% endif %}
 

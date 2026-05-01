@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Create patient account{% endblock %}
+{% block content %}
+<section class="card center">
+  <h1>Create a patient account</h1>
+  <p class="muted">A secure, encrypted record will be created for you the
+     moment your account is set up. Only you can decide which providers
+     are allowed to view or update it.</p>
+  <form method="post" class="stack">
+    <label>Username
+      <input name="username" autocomplete="username" pattern="[a-z0-9_]{3,32}"
+             required value="{{ form.get('username','') }}">
+    </label>
+    <label>Email
+      <input type="email" name="email" autocomplete="email" required
+             value="{{ form.get('email','') }}">
+    </label>
+    <label>Full name
+      <input name="full_name" autocomplete="name"
+             value="{{ form.get('full_name','') }}">
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="new-password"
+             minlength="8" required>
+      <span class="muted small">≥ 8 characters, at least one uppercase letter and one digit</span>
+    </label>
+    <button type="submit">Create account</button>
+  </form>
+  <p class="muted small center-text">
+    Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a>
+  </p>
+</section>
+{% endblock %}

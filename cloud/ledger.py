@@ -42,11 +42,14 @@ def _hash(block: Dict[str, Any]) -> str:
 
 
 def _table():
+    import os
     import boto3
     return boto3.resource(
         "dynamodb",
         endpoint_url=config.ENDPOINT_URL,
         region_name=config.REGION,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
     ).Table(config.DDB_LEDGER_TABLE)
 
 

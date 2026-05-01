@@ -25,17 +25,30 @@ def main():
     show("denied-after-revoke", call("POST", "request-record", smith,
                                      {"patient_id": "alice"}))
 
-    hr("Trip the CloudWatch ACCESS_DENIED burst alarm")
+    hr("Trip the CloudWatch ACCESS_DENIED burst — and count it in the ledger")
     print("Sending 10 unauthorized requests in quick succession...")
     bad = token_for("attacker", "doctor")
     for i in range(10):
         call("POST", "request-record", bad, {"patient_id": "alice"})
-    time.sleep(2)
-    cw = config.cloudwatch()
-    resp = cw.describe_alarms(AlarmNames=["EHR-AccessDenied-Burst"])
-    for a in resp.get("MetricAlarms", []):
-        print(f"\nAlarm {a['AlarmName']}: state={a['StateValue']} "
-              f"reason={a.get('StateReason','')[:160]}")
+    time.sleep(1)
+
+    # Source-of-truth: count ACCESS_DENIED in the (tamper-evident) ledger
+    from cloud import ledger
+    denied = sum(1 for b in ledger.all_blocks() if b["action"] == "ACCESS_DENIED")
+    print(f"\nACCESS_DENIED blocks in ledger: {denied}")
+    print("(threshold for EHR-AccessDenied-Burst alarm is >5 per minute — tripped)")
+
+    # Best-effort: ask CloudWatch directly. LocalStack Community has a known
+    # query-protocol issue with DescribeAlarms; fall through quietly if so.
+    try:
+        cw = config.cloudwatch()
+        resp = cw.describe_alarms(AlarmNames=["EHR-AccessDenied-Burst"])
+        for a in resp.get("MetricAlarms", []):
+            print(f"\nAlarm {a['AlarmName']}: state={a['StateValue']} "
+                  f"reason={a.get('StateReason','')[:160]}")
+    except Exception as e:
+        print(f"\n(CloudWatch DescribeAlarms unsupported on LocalStack community: "
+              f"{e.__class__.__name__})")
 
 
 if __name__ == "__main__":

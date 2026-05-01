@@ -1,17 +1,12 @@
-"""IAM-style declarative policy evaluator.
+"""IAM-style declarative policy.
 
-Policies are JSON like:
-  {
-    "Version": "2026-04-30",
-    "Statement": [
-      {"Effect":"Allow","Principal":{"role":"patient"},"Action":["grant","revoke"],
-       "Resource":"patient::self"},
-      {"Effect":"Allow","Principal":{"role":"doctor"},"Action":["request-record"],
-       "Resource":"patient::*","Condition":{"GrantExists":true}}
-    ]
-  }
+Roles: patient, doctor, admin
+Actions: grant, revoke, request-record, add-note, view-history,
+         audit, verify-chain, approve-doctor, reject-doctor, verify-npi
 
-The evaluator returns ALLOW/DENY plus the matching statement for auditability.
+Conditions on doctor actions check that an active grant of sufficient scope
+exists. The scope ladder (read < write < history) is enforced in the handler;
+the policy here only enforces presence.
 """
 from typing import Any, Dict, Tuple
 
@@ -27,9 +22,16 @@ DEFAULT_POLICY: Dict[str, Any] = {
         {
             "Effect": "Allow",
             "Principal": {"role": "doctor"},
-            "Action": ["request-record"],
+            "Action": ["request-record", "add-note", "view-history"],
             "Resource": "patient::*",
             "Condition": {"GrantExists": True},
+        },
+        {
+            "Effect": "Allow",
+            "Principal": {"role": "admin"},
+            "Action": ["approve-doctor", "reject-doctor",
+                       "audit", "verify-chain", "verify-npi"],
+            "Resource": "*",
         },
         {
             "Effect": "Allow",
@@ -60,6 +62,8 @@ def evaluate(principal: Dict[str, str], action: str, resource: str,
 
 
 def _resource_match(pattern: str, resource: str, principal: Dict[str, str]) -> bool:
+    if pattern == "*":
+        return True
     if pattern == resource:
         return True
     if pattern.endswith("::*") and resource.startswith(pattern[:-1]):

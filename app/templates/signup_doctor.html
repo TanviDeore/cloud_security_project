@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Provider registration{% endblock %}
+{% block content %}
+<section class="card center">
+  <h1>Healthcare provider registration</h1>
+  <p class="muted">
+    Your NPI is verified against the public CMS National Provider Identifier
+    Registry. If your name and license state match the registry, your account
+    is activated immediately. Otherwise it is held for administrator review.
+  </p>
+  <form method="post" class="stack">
+    <label>Username
+      <input name="username" autocomplete="username" pattern="[a-z0-9_]{3,32}"
+             required value="{{ form.get('username','') }}">
+    </label>
+    <label>Email
+      <input type="email" name="email" autocomplete="email" required
+             value="{{ form.get('email','') }}">
+    </label>
+    <div class="row">
+      <label>First name
+        <input name="first_name" autocomplete="given-name" required
+               value="{{ form.get('first_name','') }}">
+      </label>
+      <label>Last name
+        <input name="last_name" autocomplete="family-name" required
+               value="{{ form.get('last_name','') }}">
+      </label>
+    </div>
+    <div class="row">
+      <label>NPI (10 digits)
+        <input name="npi" pattern="\d{10}" required
+               value="{{ form.get('npi','') }}">
+      </label>
+      <label>License state
+        <input name="license_state" maxlength="2" placeholder="TX" required
+               value="{{ form.get('license_state','') }}">
+      </label>
+    </div>
+    <label>Password
+      <input type="password" name="password" autocomplete="new-password"
+             minlength="8" required>
+      <span class="muted small">≥ 8 characters, at least one uppercase letter and one digit</span>
+    </label>
+    <button type="submit">Submit for verification</button>
+  </form>
+  <p class="muted small center-text">
+    Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a>
+  </p>
+</section>
+{% endblock %}

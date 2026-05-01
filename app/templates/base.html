@@ -7,15 +7,40 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">EHR · Patient-Centric Cloud Exchange</div>
+    <div class="brand">
+      <a href="{{ url_for('index') }}" aria-label="EHR Cloud — Patient-Centric Cloud Exchange">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect width="24" height="24" rx="6" fill="url(#brandGrad)"/>
+            <path d="M12 7v10M7 12h10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="brandGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#4338ca"/>
+                <stop offset="1" stop-color="#6366f1"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </span>
+        <span class="brand-text">EHR&nbsp;Cloud</span>
+        <span class="brand-tagline">Patient-Centric Cloud Exchange</span>
+      </a>
+    </div>
     {% if session.get('user') %}
       <nav>
         {% if session['user']['role'] == 'patient' %}
-          <a href="{{ url_for('patient.dashboard') }}">My Record</a>
-        {% else %}
-          <a href="{{ url_for('doctor.dashboard') }}">Patient Lookup</a>
+          <a href="{{ url_for('patient.dashboard') }}">My record</a>
+        {% elif session['user']['role'] == 'doctor' %}
+          <a href="{{ url_for('doctor.dashboard') }}">Patient lookup</a>
+        {% elif session['user']['role'] == 'admin' %}
+          <a href="{{ url_for('admin.dashboard') }}">Admin queue</a>
+          <a href="{{ url_for('audit.dashboard') }}">Audit ledger</a>
         {% endif %}
-        <a href="{{ url_for('audit.dashboard') }}">Audit Ledger</a>
+        <a href="{{ url_for('notifs.inbox') }}" class="notif-link">
+          Notifications
+          {% if unread_count and unread_count > 0 %}
+            <span class="notif-badge">{{ unread_count }}</span>
+          {% endif %}
+        </a>
         <span class="user">{{ session['user']['username'] }} ({{ session['user']['role'] }})</span>
         <a href="{{ url_for('auth.logout') }}">Logout</a>
       </nav>
@@ -30,7 +55,8 @@
     {% block content %}{% endblock %}
   </main>
   <footer>
-    Cloud-backed by S3 · KMS · DynamoDB · Cognito · Secrets Manager · Lambda · API Gateway · CloudWatch (LocalStack)
+    &copy; EHR Cloud Exchange ·
+    <a href="{{ url_for('cloud_architecture') }}">Cloud architecture</a>
   </footer>
 </body>
 </html>

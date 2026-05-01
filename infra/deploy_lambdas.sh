@@ -18,15 +18,26 @@ deploy() {
   TMPDIR=$(mktemp -d)
   cp -R "$SRC_DIR"/. "$TMPDIR"/
   cp -R cloud "$TMPDIR/cloud"
+  # Install pip deps into the zip root targeting the Lambda runtime
+  # (Linux x86_64 / CPython 3.11) — without this, native modules like
+  # pycryptodome ship the host's macOS wheel and fail to load.
+  if [ -f "$SRC_DIR/requirements.txt" ]; then
+    pip install --quiet --target "$TMPDIR" \
+      --platform manylinux2014_x86_64 \
+      --python-version 3.11 \
+      --implementation cp \
+      --only-binary=:all: \
+      --upgrade -r "$SRC_DIR/requirements.txt"
+  fi
   (cd "$TMPDIR" && zip -qr "$ZIP" .)
   rm -rf "$TMPDIR"
 
-  if aws --endpoint-url "$AWS_ENDPOINT_URL" lambda get-function --function-name "$NAME" >/dev/null 2>&1; then
-    aws --endpoint-url "$AWS_ENDPOINT_URL" lambda update-function-code \
+  if awslocal lambda get-function --function-name "$NAME" >/dev/null 2>&1; then
+    awslocal lambda update-function-code \
       --function-name "$NAME" --zip-file "fileb://$ZIP" >/dev/null
     echo "Updated Lambda $NAME"
   else
-    aws --endpoint-url "$AWS_ENDPOINT_URL" lambda create-function \
+    awslocal lambda create-function \
       --function-name "$NAME" \
       --runtime python3.11 \
       --role "$ROLE_ARN" \

@@ -6,7 +6,7 @@ hop changes), so the demo still works during early bootstrapping.
 """
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -26,8 +26,8 @@ def _api_base():
     return _API_BASE
 
 
-def call(method: str, route: str, token: str, body: Dict[str, Any] | None = None
-         ) -> Dict[str, Any]:
+def call(method: str, route: str, token: str,
+         body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     base = _api_base()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     if base:

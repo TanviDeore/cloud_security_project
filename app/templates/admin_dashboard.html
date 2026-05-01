@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Admin · Provider verification{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Provider verification queue</h1>
+  <p class="muted">
+    Administrator accounts are provisioned by the platform operator and
+    cannot be created through the website. Every approval and rejection
+    on this page is recorded in the tamper-evident audit log.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Pending review ({{ pending|length }})</h2>
+  {% if pending %}
+    <table>
+      <thead><tr>
+        <th>User</th><th>Name</th><th>NPI / State</th>
+        <th>Reason</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        {% for u in pending %}
+          <tr>
+            <td>{{ u.username }}<br>
+                <span class="muted small">{{ u.email }}</span></td>
+            <td>{{ u.first_name }} {{ u.last_name }}</td>
+            <td>{{ u.npi }} / {{ u.license_state }}</td>
+            <td><span class="muted small">{{ u.npi_reason }}</span></td>
+            <td class="actions">
+              <form method="post" action="{{ url_for('admin.verify', username=u.username) }}">
+                <button type="submit">Re-verify NPI</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.approve', username=u.username) }}">
+                <button class="approve" type="submit">Approve</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.reject', username=u.username) }}">
+                <input name="reason" placeholder="reason" required>
+                <button class="danger" type="submit">Reject</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted small">No pending registrations.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Active doctors ({{ active_doctors|length }})</h2>
+  <table>
+    <thead><tr>
+      <th>Username</th><th>Name</th><th>NPI</th><th>State</th><th>NPI verified</th>
+    </tr></thead>
+    <tbody>
+      {% for u in active_doctors %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.get('first_name','') }} {{ u.get('last_name','') }}</td>
+          <td>{{ u.get('npi','—') }}</td>
+          <td>{{ u.get('license_state','—') }}</td>
+          <td>{{ "yes" if u.get('npi_verified') else "no" }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if rejected %}
+<section class="card">
+  <h2>Rejected ({{ rejected|length }})</h2>
+  <table>
+    <thead><tr><th>Username</th><th>NPI</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for u in rejected %}
+        <tr><td>{{ u.username }}</td><td>{{ u.npi }}</td>
+            <td><span class="muted small">{{ u.npi_reason }}</span></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

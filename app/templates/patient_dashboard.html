@@ -1,14 +1,106 @@
 {% extends "base.html" %}
 {% block title %}Patient · {{ user.username }}{% endblock %}
 {% block content %}
+
 <section class="card">
-  <h1>My Record · {{ user.username }}</h1>
+  <div class="card-head">
+    <h1>My record · {{ user.username }}</h1>
+    <a class="btn-link" href="{{ url_for('audit.export_pdf') }}">
+      Download signed audit PDF →
+    </a>
+  </div>
   <p class="muted">
-    You are the sole authority over this record. Grants are stored in DynamoDB
-    and enforced by the smart-contract Lambda. Every grant, revoke, and access
-    attempt is appended to the tamper-evident audit ledger.
+    You are the sole authority over this record. Every grant, revocation,
+    and access attempt is captured in a tamper-evident log that you can
+    review or download as a digitally signed report.
   </p>
+
+  {% if chain.valid %}
+    <div class="badge ok small">Audit chain valid · {{ chain.total }} entries verified</div>
+  {% else %}
+    <div class="badge bad small">
+      Audit chain broken at #{{ chain.broken_at }}
+      {% if chain.reason %}— {{ chain.reason }}{% endif %}
+    </div>
+  {% endif %}
 </section>
+
+{% if record %}
+<section class="card">
+  <h2>Health records</h2>
+
+  <div class="record-grid">
+    <div>
+      <h3>Personal</h3>
+      <table class="kv">
+        <tr><td>Name</td><td>{{ record.full_name or "—" }}</td></tr>
+        <tr><td>Date of birth</td><td>{{ record.dob or "—" }}</td></tr>
+        <tr><td>Blood type</td><td>{{ record.blood_type or "—" }}</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Allergies</h3>
+      {% if record.allergies %}
+        <ul class="bullets">{% for a in record.allergies %}<li>{{ a }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="muted small">None recorded.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <h3>Conditions</h3>
+  {% if record.conditions %}
+    <table>
+      <thead><tr><th>Condition</th><th>Diagnosed</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for c in record.conditions %}
+          <tr><td>{{ c.name }}</td><td>{{ c.diagnosed }}</td><td>{{ c.status }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="muted small">No active conditions.</p>{% endif %}
+
+  <h3>Medications</h3>
+  {% if record.medications %}
+    <table>
+      <thead><tr><th>Name</th><th>Dose</th><th>Frequency</th></tr></thead>
+      <tbody>
+        {% for m in record.medications %}
+          <tr><td>{{ m.name }}</td><td>{{ m.dose }}</td><td>{{ m.frequency }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="muted small">No active medications.</p>{% endif %}
+
+  <h3>Encounters</h3>
+  {% if record.encounters %}
+    <table>
+      <thead><tr><th>Date</th><th>Provider</th><th>Notes</th></tr></thead>
+      <tbody>
+        {% for e in record.encounters %}
+          <tr><td>{{ e.date }}</td><td>{{ e.provider }}</td><td>{{ e.notes }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="muted small">No past encounters.</p>{% endif %}
+
+  <h3>Clinical notes</h3>
+  {% if record.clinical_notes %}
+    <table>
+      <thead><tr><th>Author</th><th>When (UTC)</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for n in record.clinical_notes|reverse %}
+          <tr>
+            <td>{{ n.author }}</td>
+            <td class="muted small">{{ n.created_at|ts }}</td>
+            <td>{{ n.text }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="muted small">No clinical notes added yet.</p>{% endif %}
+</section>
+{% endif %}
 
 <section class="card">
   <h2>Grant access to a doctor</h2>
@@ -18,8 +110,17 @@
         {% for d in doctors %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
       </select>
     </label>
-    <label>Duration (seconds)
-      <input type="number" name="ttl_seconds" value="86400" min="60">
+    <label>Scope
+      <select name="scope">
+        {% for label, val in scopes %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Duration
+      <select name="ttl_seconds">
+        {% for label, val in durations %}
+          <option value="{{ val }}" {% if val == 86400 %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </label>
     <button type="submit">Grant</button>
   </form>
@@ -29,13 +130,13 @@
   <h2>Active grants</h2>
   {% if grants %}
     <table>
-      <thead><tr><th>Doctor</th><th>Scope</th><th>Expires (epoch)</th><th>Revoked</th><th></th></tr></thead>
+      <thead><tr><th>Doctor</th><th>Scope</th><th>Expires in</th><th>Revoked</th><th></th></tr></thead>
       <tbody>
         {% for g in grants %}
           <tr>
             <td>{{ g.doctor_id }}</td>
-            <td>{{ g.scope }}</td>
-            <td>{{ g.expires_at }}</td>
+            <td><span class="badge-scope scope-{{ g.scope }}">{{ g.scope }}</span></td>
+            <td>{{ g.expires_at|relative_time }}</td>
             <td>{{ "yes" if g.revoked else "no" }}</td>
             <td>
               <form method="post" action="{{ url_for('patient.revoke') }}">
@@ -48,29 +149,28 @@
       </tbody>
     </table>
   {% else %}
-    <p class="muted">No grants issued yet.</p>
+    <p class="muted small">No grants issued yet.</p>
   {% endif %}
 </section>
 
 <section class="card">
-  <h2>Recent ledger entries about my record</h2>
-  {% if blocks %}
+  <h2>Recent doctor activity on my record</h2>
+  {% if doctor_blocks %}
     <table class="ledger">
-      <thead><tr><th>#</th><th>When</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead>
+      <thead><tr><th>When (UTC)</th><th>Doctor</th><th>Action</th><th>Details</th></tr></thead>
       <tbody>
-        {% for b in blocks|reverse %}
+        {% for b in doctor_blocks|reverse %}
           <tr class="action-{{ b.action|lower }}">
-            <td>{{ b.block_id }}</td>
-            <td>{{ b.timestamp|ts }}</td>
+            <td class="muted small">{{ b.timestamp|ts }}</td>
             <td>{{ b.actor }}</td>
             <td>{{ b.action }}</td>
-            <td><code>{{ b.details }}</code></td>
+            <td>{{ b|format_details }}</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p class="muted">No activity recorded.</p>
+    <p class="muted small">No doctor has accessed your record yet.</p>
   {% endif %}
 </section>
 {% endblock %}

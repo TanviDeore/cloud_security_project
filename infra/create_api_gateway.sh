@@ -11,38 +11,38 @@ REGION=${AWS_DEFAULT_REGION:-us-east-1}
 ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 
 # Reuse if exists
-EXISTING=$(aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway get-rest-apis \
+EXISTING=$(awslocal apigateway get-rest-apis \
   --query "items[?name=='${API_NAME}'].id" --output text || true)
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
   API_ID="$EXISTING"
   echo "API Gateway $API_NAME exists ($API_ID)"
 else
-  API_ID=$(aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway create-rest-api \
+  API_ID=$(awslocal apigateway create-rest-api \
     --name "$API_NAME" --query 'id' --output text)
   echo "Created API Gateway $API_NAME ($API_ID)"
 fi
 
-ROOT_ID=$(aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway get-resources \
+ROOT_ID=$(awslocal apigateway get-resources \
   --rest-api-id "$API_ID" --query "items[?path=='/'].id" --output text)
 
-LAMBDA_ARN=$(aws --endpoint-url "$AWS_ENDPOINT_URL" lambda get-function \
+LAMBDA_ARN=$(awslocal lambda get-function \
   --function-name "$LAMBDA" --query 'Configuration.FunctionArn' --output text)
 INVOKE_URI="arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
 
 create_route() {
   local PATH_PART=$1; local METHOD=$2
   local RID
-  RID=$(aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway get-resources \
+  RID=$(awslocal apigateway get-resources \
     --rest-api-id "$API_ID" --query "items[?pathPart=='${PATH_PART}'].id" --output text)
   if [ -z "$RID" ] || [ "$RID" = "None" ]; then
-    RID=$(aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway create-resource \
+    RID=$(awslocal apigateway create-resource \
       --rest-api-id "$API_ID" --parent-id "$ROOT_ID" --path-part "$PATH_PART" \
       --query 'id' --output text)
   fi
-  aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway put-method \
+  awslocal apigateway put-method \
     --rest-api-id "$API_ID" --resource-id "$RID" \
     --http-method "$METHOD" --authorization-type NONE >/dev/null 2>&1 || true
-  aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway put-integration \
+  awslocal apigateway put-integration \
     --rest-api-id "$API_ID" --resource-id "$RID" \
     --http-method "$METHOD" --type AWS_PROXY \
     --integration-http-method POST \
@@ -53,14 +53,19 @@ create_route() {
 create_route "grant"          POST
 create_route "revoke"         POST
 create_route "request-record" POST
+create_route "add-note"       POST
+create_route "view-history"   GET
 create_route "audit"          GET
 create_route "verify-chain"   GET
+create_route "verify-npi"     POST
+create_route "approve-doctor" POST
+create_route "reject-doctor"  POST
 
-aws --endpoint-url "$AWS_ENDPOINT_URL" apigateway create-deployment \
+awslocal apigateway create-deployment \
   --rest-api-id "$API_ID" --stage-name dev >/dev/null
 
 # Allow API Gateway to invoke the Lambda
-aws --endpoint-url "$AWS_ENDPOINT_URL" lambda add-permission \
+awslocal lambda add-permission \
   --function-name "$LAMBDA" \
   --statement-id "apigw-invoke" \
   --action lambda:InvokeFunction \

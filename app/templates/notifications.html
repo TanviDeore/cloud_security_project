@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Notifications</h1>
+  <p class="muted">Every grant, revocation, record access, clinical note,
+     account approval, and verification event creates a notification.
+     Items below are marked as read after this page loads.</p>
+  {% if items %}
+    <table>
+      <thead><tr><th>When (UTC)</th><th>Message</th></tr></thead>
+      <tbody>
+        {% for n in items %}
+          <tr>
+            <td class="muted small">{{ n.notif_id|notif_dt }}</td>
+            <td>{{ n.message }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted small">No notifications yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

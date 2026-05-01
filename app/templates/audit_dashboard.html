@@ -4,9 +4,9 @@
 <section class="card">
   <h1>Blockchain Audit Ledger</h1>
   <p class="muted">
-    Tamper-evident chain of SHA-256 hashed events stored in DynamoDB.
-    Every block's hash links to its predecessor; editing any block in place
-    invalidates the chain from that point forward.
+    A tamper-evident chain of every event in the system. Each entry is
+    cryptographically linked to the one before it, so any edit, deletion,
+    or re-ordering is detected immediately.
   </p>
 
   {% if chain.valid %}
