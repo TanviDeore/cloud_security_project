@@ -11,6 +11,7 @@
   <form method="post" class="stack">
     <label>Username
       <input name="username" autocomplete="username" pattern="[a-z0-9_]{3,32}"
+             title="3–32 characters, lowercase letters, digits, and underscores only"
              required value="{{ form.get('username','') }}">
     </label>
     <label>Email
@@ -29,7 +30,7 @@
     </div>
     <div class="row">
       <label>NPI (10 digits)
-        <input name="npi" pattern="\d{10}" required
+        <input name="npi" pattern="\d{10}" title="Must be exactly 10 digits" required
                value="{{ form.get('npi','') }}">
       </label>
       <label>License state
@@ -39,7 +40,9 @@
     </div>
     <label>Password
       <input type="password" name="password" autocomplete="new-password"
-             minlength="8" required>
+             pattern="(?=.*[A-Z])(?=.*\d).{8,}"
+             title="Must be at least 8 characters long, containing at least one uppercase letter and one digit"
+             required>
       <span class="muted small">≥ 8 characters, at least one uppercase letter and one digit</span>
     </label>
     <button type="submit">Submit for verification</button>

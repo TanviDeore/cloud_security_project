@@ -3,10 +3,18 @@ import os
 import time
 import uuid
 from typing import Any, Dict, List
-
+from decimal import Decimal
 from boto3.dynamodb.conditions import Key
-
 from . import config
+
+def _clean(obj):
+    if isinstance(obj, list):
+        return [_clean(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == int(obj) else float(obj)
+    return obj
 
 
 def _table():
@@ -41,7 +49,7 @@ def list_for(username: str, limit: int = 50) -> List[Dict[str, Any]]:
         ScanIndexForward=False,
         Limit=limit,
     )
-    return resp.get("Items", [])
+    return _clean(resp.get("Items", []))
 
 
 def unread_count(username: str) -> int:

@@ -113,6 +113,14 @@ def _render_pdf(patient: str, blocks: List[Dict[str, Any]],
     story.append(Paragraph("KMS signature (base64):", s["Heading4"]))
     story.append(Paragraph("__SIGNATURE_PLACEHOLDER__", s["Hash"]))
 
+    story.append(Spacer(1, 24))
+    story.append(Paragraph("Glossary", s["Heading4"]))
+    story.append(Paragraph(
+        "<b>Chain status</b>: Every ledger entry is linked to the previous one using "
+        "cryptographic hashes (a blockchain-style structure). A 'VALID' status confirms "
+        "the entire history is intact and untampered with. A 'BROKEN' status indicates "
+        "unauthorized modification of past records.", s["BodyText"]))
+
     doc.build(story)
     return buf.getvalue()
 

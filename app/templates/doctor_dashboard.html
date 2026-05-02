@@ -30,42 +30,134 @@
   {% endif %}
 </section>
 
-<section class="card">
-  <h2>Request a patient record</h2>
-  <form method="post" action="{{ url_for('doctor.request_record') }}" class="row">
-    <label>Patient
-      <input name="patient_id" placeholder="patient username" required>
-    </label>
-    <button type="submit">Fetch record</button>
-  </form>
-</section>
+<div class="record-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+  <section class="card">
+    <h2>Request a patient record</h2>
+    <form method="post" action="{{ url_for('doctor.request_record') }}" class="row">
+      <label style="flex: 2;">Select patient
+        <select name="patient_id" required>
+          <option value="">— choose a patient —</option>
+          {% for p in patients %}
+            <option value="{{ p.username }}">{{ p.username }} ({{ p.first_name }} {{ p.last_name }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Fetch record</button>
+    </form>
+  </section>
 
-{% if record %}
+  <section class="card">
+    <h2>Request new access grant</h2>
+    <form method="post" action="{{ url_for('doctor.request_access') }}" class="stack">
+      <div class="row" style="gap: 1rem;">
+        <label style="flex: 2;">Patient
+          <select name="patient_id" required>
+            <option value="">— choose a patient —</option>
+            {% for p in patients %}
+              <option value="{{ p.username }}">{{ p.username }} ({{ p.first_name }} {{ p.last_name }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label style="flex: 1;">Scope
+          <select name="scope">
+            <option value="read">Read-Only</option>
+            <option value="write">Read & Write</option>
+          </select>
+        </label>
+        <label style="flex: 1;">Duration
+          <select name="ttl_seconds">
+            <option value="3600">1 hour</option>
+            <option value="28800">8 hours</option>
+            <option value="86400" selected>24 hours</option>
+            <option value="604800">1 week</option>
+          </select>
+        </label>
+      </div>
+      <button type="submit" class="secondary">Send access request</button>
+    </form>
+  </section>
+</div>
+
+{% if record and record.data %}
+{% set d = record.data %}
 <section class="card">
-  <h2>Decrypted record · {{ record.patient }}
-    <span class="badge-scope scope-{{ record.scope }}">{{ record.scope }}</span></h2>
-  <p class="muted">Audit block #{{ record.block }} appended.</p>
-  <pre class="record">{{ record.json }}</pre>
+  <div class="card-head">
+    <h2>Patient record · {{ d.patient_id }}
+      <span class="badge-scope scope-{{ record.scope }}">{{ record.scope }}</span></h2>
+    <div class="muted small">Audit block #{{ record.block }}</div>
+  </div>
+
+  <div class="record-grid">
+    <div>
+      <h3>Personal</h3>
+      <table class="kv">
+        <tr><td>Name</td><td>{{ d.full_name or "—" }}</td></tr>
+        <tr><td>Date of birth</td><td>{{ d.dob or "—" }}</td></tr>
+        <tr><td>Blood type</td><td>{{ d.blood_type or "—" }}</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Allergies</h3>
+      {% if d.allergies %}
+        <ul class="bullets">{% for a in d.allergies %}<li>{{ a }}</li>{% endfor %}</ul>
+      {% else %}
+        <p class="muted small">None recorded.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <h3>Clinical notes</h3>
+  {% if d.clinical_notes %}
+    <table>
+      <thead><tr><th>Author</th><th>When (UTC)</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for n in d.clinical_notes|reverse %}
+          <tr>
+            <td>{{ n.author }}</td>
+            <td class="muted small">{{ n.created_at|ts }}</td>
+            <td>{{ n.text }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}<p class="muted small">No clinical notes recorded.</p>{% endif %}
+
+  <h3>Reports</h3>
+  {% if d.reports %}
+    <ul class="bullets">
+      {% for r in d.reports|reverse %}
+        <li>
+          <strong>{{ r.filename }}</strong>
+          <span class="muted small">({{ r.uploaded_at|ts }})</span>
+          <a href="{{ url_for('doctor.download_report', patient_id=d.patient_id, s3_key=r.s3_key, filename=r.filename) }}" 
+             style="margin-left: 1rem;" class="small">Download ↓</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}<p class="muted small">No reports found.</p>{% endif %}
 
   {% if record.scope in ('write', 'history') %}
-  <h3>Add clinical note</h3>
-  <form method="post" action="{{ url_for('doctor.add_note') }}" class="stack">
-    <input type="hidden" name="patient_id" value="{{ record.patient }}">
-    <textarea name="note" rows="3" required
-              placeholder="e.g. BP 130/85, started low-dose ACEi 5 mg."></textarea>
-    <button type="submit">Append note</button>
-  </form>
+  <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border);">
+    <h3>Add clinical note</h3>
+    <form method="post" action="{{ url_for('doctor.add_note') }}" class="stack">
+      <input type="hidden" name="patient_id" value="{{ record.patient }}">
+      <textarea name="note" rows="3" required
+                placeholder="e.g. BP 130/85, started low-dose ACEi 5 mg."></textarea>
+      <button type="submit">Append note</button>
+    </form>
+  </div>
   {% else %}
-  <p class="muted small">This grant is read-only. The patient must upgrade
-     your scope to <code>write</code> to let you add notes.</p>
+  <p class="muted small" style="margin-top: 2rem;">This grant is read-only. Append access is disabled.</p>
   {% endif %}
 </section>
 {% endif %}
 
 {% if last_error %}
 <section class="card error">
-  <h2>Access denied</h2>
-  <pre>{{ last_error }}</pre>
+  <div class="banner bad" style="border-radius: var(--radius); padding: 1rem;">
+    <strong>Access denied:</strong> 
+    {{ last_error.reason if last_error is mapping else last_error }}
+  </div>
 </section>
 {% endif %}
 {% endblock %}

@@ -18,11 +18,21 @@ import hashlib
 import json
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, Iterator, Optional
 
 from boto3.dynamodb.conditions import Key
 
 from . import config
+
+def _clean(obj):
+    if isinstance(obj, list):
+        return [_clean(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == int(obj) else float(obj)
+    return obj
 
 CHAIN = "ehr"
 GENESIS_HASH = "GENESIS"
@@ -74,7 +84,7 @@ def append_block(actor: str, action: str, resource: str, details: Dict[str, Any]
         "actor": actor,
         "action": action,
         "resource": resource,
-        "details": json.dumps(details, separators=(",", ":")),
+        "details": json.dumps(_clean(details), separators=(",", ":")),
         "prev_hash": prev_hash,
     }
     block["hash"] = _hash(block)
@@ -93,7 +103,7 @@ def all_blocks() -> Iterator[Dict[str, Any]]:
             kwargs["ExclusiveStartKey"] = last_eval
         resp = _table().query(**kwargs)
         for item in resp.get("Items", []):
-            yield item
+            yield _clean(item)
         last_eval = resp.get("LastEvaluatedKey")
         if not last_eval:
             return

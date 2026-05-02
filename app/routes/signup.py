@@ -120,8 +120,6 @@ def doctor_signup():
                 notifications.push(admin_user["username"],
                                    f"New doctor signup awaiting review: {u}",
                                    link="/admin/")
-            flash("NPI could not be auto-verified. Your account is pending "
-                  "administrator review. Reason: "
-                  f"{verification.get('reason', 'unspecified')}", "info")
+            flash("Your account is pending administrator review.", "info")
         return redirect(url_for("auth.login"))
     return render_template("signup_doctor.html", form={})

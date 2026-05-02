@@ -9,6 +9,7 @@
   <form method="post" class="stack">
     <label>Username
       <input name="username" autocomplete="username" pattern="[a-z0-9_]{3,32}"
+             title="3–32 characters, lowercase letters, digits, and underscores only"
              required value="{{ form.get('username','') }}">
     </label>
     <label>Email
@@ -21,7 +22,9 @@
     </label>
     <label>Password
       <input type="password" name="password" autocomplete="new-password"
-             minlength="8" required>
+             pattern="(?=.*[A-Z])(?=.*\d).{8,}"
+             title="Must be at least 8 characters long, containing at least one uppercase letter and one digit"
+             required>
       <span class="muted small">≥ 8 characters, at least one uppercase letter and one digit</span>
     </label>
     <button type="submit">Create account</button>

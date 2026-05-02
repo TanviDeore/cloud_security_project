@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Edit profile · {{ user.username }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h1>Edit health profile · {{ user.username }}</h1>
+    <a href="{{ url_for('patient.dashboard') }}" class="btn-link">← Back to dashboard</a>
+  </div>
+  <p class="muted">Update your personal information and share it securely with your doctors.</p>
+</section>
+
+<div class="record-grid" style="grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
+  <section class="card">
+    <h2>Personal information</h2>
+    <form method="post" action="{{ url_for('patient.edit_profile') }}" class="stack">
+      <div class="row">
+        <label>Full name
+          <input name="full_name" value="{{ record.full_name or '' }}" placeholder="Legal name">
+        </label>
+        <label>Date of birth
+          <input type="date" name="dob" value="{{ record.dob or '' }}">
+        </label>
+      </div>
+      <div class="row">
+        <label>Blood type
+          <select name="blood_type">
+            <option value="">Select...</option>
+            {% for bt in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] %}
+              <option value="{{ bt }}" {% if record.blood_type == bt %}selected{% endif %}>{{ bt }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Email
+          <input type="email" name="email" value="{{ record.email or '' }}" placeholder="Contact email">
+        </label>
+      </div>
+      
+      <h3>Allergies</h3>
+      <p class="muted small">Separated by commas.</p>
+      <input name="allergies_raw" value="{{ record.allergies|join(', ') }}" 
+             placeholder="Peanuts, Penicillin, etc.">
+
+      <button type="submit">Save profile changes</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Upload medical reports</h2>
+    <p class="muted small">Upload lab results, imaging, or vaccination records (PDF/JPG/PNG).</p>
+    <form method="post" action="{{ url_for('patient.upload_report') }}" enctype="multipart/form-data" class="stack">
+      <input type="file" name="report" required>
+      <button type="submit" class="secondary">Upload file</button>
+    </form>
+
+    <h3 style="margin-top: 2rem;">Existing reports</h3>
+    {% if record.reports %}
+      <ul class="bullets">
+        {% for r in record.reports|reverse %}
+          <li>
+            <strong>{{ r.filename }}</strong>
+            <span class="muted small">({{ r.uploaded_at|ts }})</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted small">No reports uploaded yet.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

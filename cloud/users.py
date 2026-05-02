@@ -3,10 +3,18 @@ identity (status, role, bcrypt password, lockout counters, NPI metadata)."""
 import os
 import time
 from typing import Any, Dict, List, Optional
-
+from decimal import Decimal
 from boto3.dynamodb.conditions import Attr
-
 from . import config
+
+def _clean(obj):
+    if isinstance(obj, list):
+        return [_clean(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == int(obj) else float(obj)
+    return obj
 
 LOCKOUT_THRESHOLD = 5
 LOCKOUT_SECONDS = 15 * 60  # 15 minutes
@@ -25,7 +33,7 @@ def _table():
 
 def get(username: str) -> Optional[Dict[str, Any]]:
     resp = _table().get_item(Key={"username": username})
-    return resp.get("Item")
+    return _clean(resp.get("Item"))
 
 
 def put(item: Dict[str, Any]) -> None:
@@ -61,12 +69,12 @@ def is_locked(user: Dict[str, Any]) -> bool:
 
 def list_by_role(role: str) -> List[Dict[str, Any]]:
     resp = _table().scan(FilterExpression=Attr("role").eq(role))
-    return resp.get("Items", [])
+    return _clean(resp.get("Items", []))
 
 
 def list_by_status(status: str) -> List[Dict[str, Any]]:
     resp = _table().scan(FilterExpression=Attr("status").eq(status))
-    return resp.get("Items", [])
+    return _clean(resp.get("Items", []))
 
 
 def set_status(username: str, status: str) -> None:
@@ -78,6 +86,14 @@ def set_status(username: str, status: str) -> None:
     )
 
 
+def set_npi_verified(username: str, verified: bool = True) -> None:
+    _table().update_item(
+        Key={"username": username},
+        UpdateExpression="SET npi_verified = :v",
+        ExpressionAttributeValues={":v": verified},
+    )
+
+
 def all_users() -> List[Dict[str, Any]]:
     resp = _table().scan()
-    return resp.get("Items", [])
+    return _clean(resp.get("Items", []))

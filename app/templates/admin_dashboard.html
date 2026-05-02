@@ -16,7 +16,7 @@
     <table>
       <thead><tr>
         <th>User</th><th>Name</th><th>NPI / State</th>
-        <th>Reason</th><th>Actions</th>
+        <th>Actions</th>
       </tr></thead>
       <tbody>
         {% for u in pending %}
@@ -25,11 +25,7 @@
                 <span class="muted small">{{ u.email }}</span></td>
             <td>{{ u.first_name }} {{ u.last_name }}</td>
             <td>{{ u.npi }} / {{ u.license_state }}</td>
-            <td><span class="muted small">{{ u.npi_reason }}</span></td>
             <td class="actions">
-              <form method="post" action="{{ url_for('admin.verify', username=u.username) }}">
-                <button type="submit">Re-verify NPI</button>
-              </form>
               <form method="post" action="{{ url_for('admin.approve', username=u.username) }}">
                 <button class="approve" type="submit">Approve</button>
               </form>
@@ -71,11 +67,11 @@
 <section class="card">
   <h2>Rejected ({{ rejected|length }})</h2>
   <table>
-    <thead><tr><th>Username</th><th>NPI</th><th>Reason</th></tr></thead>
+    <thead><tr><th>Username</th><th>NPI</th><th>NPI verified</th></tr></thead>
     <tbody>
       {% for u in rejected %}
         <tr><td>{{ u.username }}</td><td>{{ u.npi }}</td>
-            <td><span class="muted small">{{ u.npi_reason }}</span></td>
+            <td>{{ "yes" if u.get('npi_verified') else "no" }}</td>
         </tr>
       {% endfor %}
     </tbody>

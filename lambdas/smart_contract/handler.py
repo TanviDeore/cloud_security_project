@@ -128,6 +128,18 @@ def lambda_handler(event, context):
     return _resp(404, {"error": "no such route", "route": route})
 
 
+def _human_duration(seconds: int) -> str:
+    if seconds <= 0:
+        return "now"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h { (seconds % 3600) // 60 }m"
+    return f"{seconds // 86400}d"
+
+
 # ---------------------------------------------------------------- patient ---
 
 def _grant(principal, body):
@@ -149,7 +161,7 @@ def _grant(principal, body):
                            patient=patient_id, doctor=doctor_id, scope=scope)
     notifications.push(doctor_id,
                        f"{patient_id} granted you '{scope}' access (expires "
-                       f"{int(item['expires_at'])})", link="/doctor/")
+                       f"in {_human_duration(ttl)})", link="/doctor/")
     notifications.push(patient_id,
                        f"You granted {doctor_id} '{scope}' access",
                        link="/patient/")
@@ -186,10 +198,11 @@ def _request_record(principal, body):
     allowed, why = evaluate(principal, "request-record", resource,
                             {"GrantExists": grant_item is not None})
     if not allowed:
-        return _deny(principal["username"], "request-record", resource, why)
+        reason = "No active grant found for this patient (access may be expired or revoked)" if not grant_item else why
+        return _deny(principal["username"], "request-record", resource, reason)
     if not policy_store.scope_includes(grant_item.get("scope", "read"), "read"):
         return _deny(principal["username"], "request-record", resource,
-                     f"grant scope {grant_item.get('scope')} does not include 'read'")
+                     f"Your current grant scope ({grant_item.get('scope')}) does not include 'read' access.")
     try:
         record = s3_store.get_record(patient_id)
     except Exception as e:
@@ -218,11 +231,12 @@ def _add_note(principal, body):
     allowed, why = evaluate(principal, "add-note", resource,
                             {"GrantExists": grant_item is not None})
     if not allowed:
-        return _deny(principal["username"], "add-note", resource, why)
+        reason = "No active grant found for this patient (access may be expired or revoked)" if not grant_item else why
+        return _deny(principal["username"], "add-note", resource, reason)
     if not policy_store.scope_includes(grant_item.get("scope", "read"), "write"):
         return _deny(principal["username"], "add-note", resource,
-                     f"grant scope '{grant_item.get('scope')}' is read-only — "
-                     f"need 'write' or 'history'")
+                     f"Your current grant scope ({grant_item.get('scope')}) is read-only — "
+                     "you need 'write' or 'history' access to add notes.")
     put = s3_store.append_note(patient_id, principal["username"], note_text)
     blk = ledger.append_block(
         actor=principal["username"], action="UPDATE_RECORD", resource=resource,
@@ -286,6 +300,7 @@ def _approve_doctor(principal, body):
     if not user or user.get("role") != "doctor":
         return _resp(404, {"error": "user not found or not a doctor"})
     users.set_status(target, "active")
+    users.set_npi_verified(target, True)
     blk = ledger.append_block(
         actor=principal["username"], action="APPROVE_DOCTOR",
         resource=f"user::{target}", details={"approved_by": principal["username"]})
@@ -303,6 +318,7 @@ def _reject_doctor(principal, body):
     target = body.get("username")
     reason = body.get("reason", "")
     users.set_status(target, "rejected")
+    users.set_npi_verified(target, False)
     blk = ledger.append_block(
         actor=principal["username"], action="REJECT_DOCTOR",
         resource=f"user::{target}",

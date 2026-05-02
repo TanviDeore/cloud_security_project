@@ -5,7 +5,7 @@ from functools import wraps
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 from app.api_gateway_client import call
-from cloud import policy_store
+from cloud import policy_store, users, notifications, access_requests
 
 bp = Blueprint("doctor", __name__)
 
@@ -25,10 +25,15 @@ def require_doctor(f):
 def dashboard():
     user = session["user"]
     my_grants = policy_store.list_grants_for_doctor(user["username"])
+    patients = users.list_by_role("patient")
     record = session.pop("last_record", None)
+    # Safety: ensure old session data doesn't break the new structured view
+    if record and "data" not in record:
+        record = None
+        
     last_error = session.pop("last_error", None)
     return render_template("doctor_dashboard.html",
-                           user=user, my_grants=my_grants,
+                           user=user, my_grants=my_grants, patients=patients,
                            record=record, last_error=last_error)
 
 
@@ -39,9 +44,10 @@ def request_record():
     patient_id = request.form["patient_id"]
     r = call("POST", "request-record", user["token"], {"patient_id": patient_id})
     if r["status"] == 200:
+        record_data = r["body"]["record"]
         session["last_record"] = {
             "patient": patient_id,
-            "json": json.dumps(r["body"]["record"], indent=2),
+            "data": record_data, # Store the actual dict
             "block": r["body"]["block"],
             "scope": r["body"].get("scope"),
         }
@@ -68,3 +74,56 @@ def add_note():
         flash(f"Could not add note: {r['body'].get('reason', r['body'])}",
               "error")
     return redirect(url_for("doctor.dashboard"))
+
+
+@bp.route("/request-access", methods=["POST"])
+@require_doctor
+def request_access():
+    user = session["user"]
+    patient_id = request.form["patient_id"]
+    scope = request.form.get("scope", "read")
+    ttl = int(request.form.get("ttl_seconds", 86400))
+    
+    # Create formal request record
+    access_requests.create(patient_id, user["username"], scope, ttl)
+    
+    # Send notification to patient
+    msg = (f"Dr. {user['username']} is requesting {scope} access to your record "
+           f"for {ttl // 3600} hours.")
+    notifications.push(patient_id, msg, link="/patient/")
+    
+    flash(f"Access request sent to {patient_id}. You will be notified when it is reviewed.", "info")
+    return redirect(url_for("doctor.dashboard"))
+
+
+@bp.route("/download-report")
+@require_doctor
+def download_report():
+    user = session["user"]
+    patient_id = request.args.get("patient_id")
+    s3_key = request.args.get("s3_key")
+    filename = request.args.get("filename")
+    
+    if not patient_id or not s3_key:
+        flash("Invalid report request.", "error")
+        return redirect(url_for("doctor.dashboard"))
+        
+    # VERIFY: Does the doctor have access to this patient?
+    grant = policy_store.lookup(patient_id, user["username"])
+    if not grant:
+        flash("You do not have access to this patient's records.", "error")
+        return redirect(url_for("doctor.dashboard"))
+        
+    # Fetch from S3
+    from cloud import config
+    try:
+        obj = config.s3().get_object(Bucket=config.S3_BUCKET, Key=s3_key)
+        from flask import Response
+        return Response(
+            obj["Body"].read(),
+            mimetype=obj.get("ContentType", "application/octet-stream"),
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        flash(f"Failed to download report: {e}", "error")
+        return redirect(url_for("doctor.dashboard"))

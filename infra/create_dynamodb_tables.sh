@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
 LEDGER=${DDB_LEDGER_TABLE:-AuditLedger}
 POLICY=${DDB_POLICY_TABLE:-AccessPolicies}
 USERS=${DDB_USERS_TABLE:-Users}

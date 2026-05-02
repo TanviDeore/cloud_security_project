@@ -10,9 +10,18 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from decimal import Decimal
 from boto3.dynamodb.conditions import Key
-
 from . import config
+
+def _clean(obj):
+    if isinstance(obj, list):
+        return [_clean(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, Decimal):
+        return int(obj) if obj == int(obj) else float(obj)
+    return obj
 
 VALID_SCOPES = ("read", "write", "history")
 SCOPE_RANK = {"read": 1, "write": 2, "history": 3}
@@ -65,12 +74,12 @@ def lookup(patient_id: str, doctor_id: str) -> Optional[Dict[str, Any]]:
         return None
     if item.get("revoked") or int(item.get("expires_at", 0)) < int(time.time()):
         return None
-    return item
+    return _clean(item)
 
 
 def list_grants(patient_id: str) -> List[Dict[str, Any]]:
     resp = _table().query(KeyConditionExpression=Key("patient_id").eq(patient_id))
-    return resp.get("Items", [])
+    return _clean(resp.get("Items", []))
 
 
 def list_grants_for_doctor(doctor_id: str) -> List[Dict[str, Any]]:
@@ -78,5 +87,6 @@ def list_grants_for_doctor(doctor_id: str) -> List[Dict[str, Any]]:
     from boto3.dynamodb.conditions import Attr
     resp = _table().scan(FilterExpression=Attr("doctor_id").eq(doctor_id))
     now = int(time.time())
-    return [g for g in resp.get("Items", [])
-            if not g.get("revoked") and int(g.get("expires_at", 0)) >= now]
+    items = [g for g in resp.get("Items", [])
+             if not g.get("revoked") and int(g.get("expires_at", 0)) >= now]
+    return _clean(items)

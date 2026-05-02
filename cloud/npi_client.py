@@ -66,7 +66,7 @@ def verify(npi: str, first_name: str, last_name: str,
     if fx_result:
         return fx_result
     return {"valid": False, "source": "offline-fallback",
-            "reason": f"NPI {npi} could not be verified (no network and not in fixture)"}
+            "reason": "NPI verification failed. Please verify the NPI and name provided."}
 
 
 def _try_fixture(npi: str, first: str, last: str,
@@ -108,4 +108,4 @@ def _match_fixture(fx: dict, first: str, last: str, state: str,
                 "registry_name": full, "registry_states": [fx["state"]], "npi": npi}
     return {"valid": False, "source": "offline-fallback",
             "registry_name": full, "registry_states": [fx["state"]],
-            "reason": "name or state did not match offline fixture"}
+            "reason": "name or license state did not match registry"}

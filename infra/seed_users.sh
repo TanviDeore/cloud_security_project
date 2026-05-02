@@ -5,7 +5,7 @@
 # Re-running keeps existing rows untouched (skips if username present).
 #
 # Bcrypt hashing is done in Python so the script doesn't depend on `htpasswd`.
-set -euo pipefail
+
 
 ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 USERS=${DDB_USERS_TABLE:-Users}
